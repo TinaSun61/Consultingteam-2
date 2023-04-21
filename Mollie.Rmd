@@ -1,0 +1,285 @@
+---
+title: "Consulting Project with Mollie"
+author: "Jiaqi Sun"
+date: "2023-03-18"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+options(repos = "https://cran.rstudio.com")
+
+install.packages("googlesheets4")
+#read and combine data
+library(googlesheets4)
+gs4_auth()
+```
+
+```{r}
+ED <- read_sheet("https://docs.google.com/spreadsheets/d/1tY0vf8iexoVYFaF2sPnS3HPxk1CmTbbdOxWcgYQHVCg/edit#gid=1807478678", range = "Overall", skip=1)
+ED <- ED[!is.na(ED$`Response ID`), ]
+```
+
+```{r}
+library(dplyr)
+Dname <- c("DESA-6 Q1","DESA-6 Q2", "DESA-6 Q3", "DESA-6 Q4", "DESA-6 Q5", "DESA-6 Q6")
+DESA_6 <- ED %>% 
+  select(any_of(Dname)) %>% 
+  mutate(sum=rowSums(select(., any_of(Dname))))
+```
+
+
+```{r}
+#pre-processing DESA_data
+DESA_data <- data.frame(DESA_6, ED$`What is your gender? - Selected Choice`, ED$`Event group`, ED$`To what race/ethnicity group(s) do you belong? (Choose all that apply): - Selected Choice`)
+
+DESA_data %>% 
+  rename(Gender=`ED..What.is.your.gender....Selected.Choice.`) %>% 
+  rename(Event=`ED..Event.group.`) %>% 
+  rename(Race = `ED..To.what.race.ethnicity.group.s..do.you.belong...Choose.all.that.apply.....Selected.Choice.`)-> DESA_data
+
+DESA_data$Event_combined <- ifelse(DESA_data$Event %in% c("Distance", "Mid-distance"),
+                                   "Distance-mid",
+                                   ifelse(DESA_data$Event %in% c("Sprinters", "Jumpers"),
+                                          "Sprinter-Jumper",
+                                          ifelse(DESA_data$Event %in% c("Vaulters", "Multis"),
+                                                 "Vaulter-Multi",
+                                                 ifelse(DESA_data$Event == "Throwers",
+                                                        "Throwers",
+                                                        DESA_data$Event))))
+
+DESA_data$Gender <- as.factor(DESA_data$Gender)
+DESA_data$Race <- as.factor(DESA_data$Race)
+DESA_data$Event_combined <- as.factor(DESA_data$Event_combined)
+
+DESA_data %>% 
+  rename(ED_sum= sum) %>% 
+  select(ED_sum, Gender, Event_combined, Race) -> DESA_data
+```
+
+# Kruskal-Wallis rank sum test for Eating Disorder: 
+## to see the gender differences in eating disorder
+```{r}
+kruskal.test(DESA_data$ED_sum ~ DESA_data$Gender)
+```
+
+The Kruskal-Wallis rank sum test is a non-parametric test used to compare the distribution of two or more independent groups. In this case, the test was performed on two variables, Gender and Event_combined, with the sum variable as the dependent variable.
+
+The first test results indicate that the Kruskal-Wallis chi-squared statistic for Gender is 6.3195, with 1 degree of freedom and a p-value of 0.04. This suggests that there is evidence of a significant difference in the distribution of sum between different levels of Gender.
+
+## to see the event level differences in eating disorder
+```{r}
+kruskal.test(DESA_data$ED_sum ~ DESA_data$Event_combined)
+```
+
+The second test results indicate that the Kruskal-Wallis chi-squared statistic for Event_combined is 9.6116, with 3 degrees of freedom and a p-value of 0.02. This suggests that there is also evidence of a significant difference in the distribution of sum between different levels of Event_combined.
+
+In both cases, the p-values are less than the significance level (typically 0.05), indicating that we can reject the null hypothesis of no difference between groups and conclude that there is evidence of a significant difference in the distribution of sum for each grouping variable. However, as with the Wilcoxon rank sum test, these tests do not provide information about the direction or magnitude of the difference.
+
+
+## to see the race differences in eating disorder
+```{r}
+kruskal.test(DESA_data$ED_sum ~ DESA_data$Race)
+```
+In the given output, the Kruskal-Wallis test was performed on the "ED_sum" variable, grouped by the "Race" variable in the "DESA_data" dataset. The test statistic (Kruskal-Wallis chi-squared) is 2.2196 with 5 degrees of freedom (df). The p-value is 0.818.
+
+A p-value is a measure of the evidence against the null hypothesis. In this case, the null hypothesis is that the medians of all groups are equal. Since the p-value (0.818) is greater than the conventional significance level (usually 0.05), there is not enough evidence to reject the null hypothesis. This means that we cannot conclude that there are significant differences in the medians of the "ED_sum" variable among the different "Race" groups in the "DESA_data" dataset.
+
+
+# Wilcoxon rank sum test with continuity correction to see the gender/event level differences in eating disorder (if ignore 1 non-binary gender observation)
+
+```{r}
+#remove non-binary
+DESA_data <- DESA_data[-94,]
+wilcox.test(DESA_data$ED_sum ~ DESA_data$Gender)
+```
+The Wilcoxon rank sum test suggests that there is a statistically significant difference in sum between different levels of gender, and this difference is not likely due to chance. 
+However, it does not provide information about the direction or magnitude of the difference. 
+Further analysis may be necessary to understand the nature of this difference.
+
+# Kruskal-Wallis rank sum test for Body Image Score:
+
+```{r}
+MBSQ_data <- data.frame(ED$`MBSQ-sum`, ED$`What is your gender? - Selected Choice`, ED$`Event group`, ED$`To what race/ethnicity group(s) do you belong? (Choose all that apply): - Selected Choice`)
+
+MBSQ_data %>% 
+  rename(Gender=`ED..What.is.your.gender....Selected.Choice.`) %>% 
+  rename(Event=`ED..Event.group.`) %>% 
+  rename(Race = `ED..To.what.race.ethnicity.group.s..do.you.belong...Choose.all.that.apply.....Selected.Choice.`)-> MBSQ_data
+
+MBSQ_data$Event_combined <- ifelse(MBSQ_data$Event %in% c("Distance", "Mid-distance"),
+                                   "Distance-mid",
+                                   ifelse(MBSQ_data$Event %in% c("Sprinters", "Jumpers"),
+                                          "Sprinter-Jumper",
+                                          ifelse(MBSQ_data$Event %in% c("Vaulters", "Multis"),
+                                                 "Vaulter-Multi",
+                                                 ifelse(MBSQ_data$Event == "Throwers",
+                                                        "Throwers",
+                                                        MBSQ_data$Event))))
+
+MBSQ_data$Gender <- as.factor(MBSQ_data$Gender)
+MBSQ_data$Race <- as.factor(MBSQ_data$Race)
+MBSQ_data$Event_combined <- as.factor(MBSQ_data$Event_combined)
+
+MBSQ_data %>% 
+  rename(MBSQ_sum=ED..MBSQ.sum.) %>% 
+  select(MBSQ_sum, Gender, Event_combined, Race) -> MBSQ_data
+```
+
+## to see the gender differences in Body image score
+```{r}
+kruskal.test(MBSQ_data$MBSQ_sum ~ MBSQ_data$Gender)
+```
+In the given output, the Kruskal-Wallis test was performed on the "MBSQ_sum" variable, grouped by the "Gender" variable in the "MBSQ_data" dataset. The test statistic (Kruskal-Wallis chi-squared) is 3.9095 with 2 degrees of freedom (df). The p-value is 0.1416.
+
+A p-value is a measure of the evidence against the null hypothesis. In this case, the null hypothesis is that the medians of all groups are equal. Since the p-value (0.1416) is greater than the conventional significance level (usually 0.05), there is not enough evidence to reject the null hypothesis. This means that we cannot conclude that there are significant differences in the medians of the "MBSQ_sum" variable among the different "Gender" groups in the "MBSQ_data" dataset.
+
+## to see the event level differences in Body image score
+```{r}
+kruskal.test(MBSQ_data$MBSQ_sum ~ MBSQ_data$Event_combined)
+```
+In the given output, the test was applied to the MBSQ_sum variable grouped by the Event_combined variable, resulting in a chi-squared test statistic of 0.75237 with 3 degrees of freedom. The p-value associated with this statistic is 0.8608, indicating that there is no significant difference between the medians of the groups at the 0.05 significance level. Therefore, we fail to reject the null hypothesis that the medians of the groups are equal.
+
+
+## to see the race differences in Body image score
+```{r}
+kruskal.test(MBSQ_data$MBSQ_sum ~ MBSQ_data$Race)
+```
+In the given output, the Kruskal-Wallis test was performed on the "MBSQ_sum" variable, grouped by the "Race" variable in the "MBSQ_data" dataset. The test statistic (Kruskal-Wallis chi-squared) is 7.0144 with 5 degrees of freedom (df). The p-value is 0.2196.
+
+A p-value is a measure of the evidence against the null hypothesis. In this case, the null hypothesis is that the medians of all groups are equal. Since the p-value (0.2196) is greater than the conventional significance level (usually 0.05), there is not enough evidence to reject the null hypothesis. This means that we cannot conclude that there are significant differences in the medians of the "MBSQ_sum" variable among the different "Race" groups in the "MBSQ_data" dataset.
+
+
+# Kruskal-Wallis rank sum test for Eating Competence Score:
+
+```{r}
+EC_data <- data.frame(ED$`EC-sum`, ED$`What is your gender? - Selected Choice`, ED$`Event group`, ED$`To what race/ethnicity group(s) do you belong? (Choose all that apply): - Selected Choice`)
+
+EC_data %>% 
+  rename(Gender=`ED..What.is.your.gender....Selected.Choice.`) %>% 
+  rename(Event=`ED..Event.group.`) %>% 
+  rename(Race = `ED..To.what.race.ethnicity.group.s..do.you.belong...Choose.all.that.apply.....Selected.Choice.`)-> EC_data
+
+EC_data$Event_combined <- ifelse(EC_data$Event %in% c("Distance", "Mid-distance"),
+                                   "Distance-mid",
+                                   ifelse(EC_data$Event %in% c("Sprinters", "Jumpers"),
+                                          "Sprinter-Jumper",
+                                          ifelse(EC_data$Event %in% c("Vaulters", "Multis"),
+                                                 "Vaulter-Multi",
+                                                 ifelse(EC_data$Event == "Throwers",
+                                                        "Throwers",
+                                                        EC_data$Event))))
+
+EC_data$Gender <- as.factor(EC_data$Gender)
+EC_data$Race <- as.factor(EC_data$Race)
+EC_data$Event_combined <- as.factor(EC_data$Event_combined)
+
+EC_data %>% 
+  rename(EC_sum=ED..EC.sum.) %>% 
+  select(EC_sum, Gender, Event_combined, Race) -> EC_data
+```
+
+## to see the gender differences in Eating Competence Score
+```{r}
+kruskal.test(EC_data$EC_sum ~ EC_data$Gender)
+```
+The Kruskal-Wallis rank sum test is a non-parametric statistical test that assesses whether two or more independent groups have the same population median. It is an alternative to the parametric ANOVA test when the data do not meet the assumptions of normality and equal variance.
+
+In the given output, the test was applied to the EC_sum variable grouped by the Gender variable, resulting in a chi-squared test statistic of 3.081 with 2 degrees of freedom. The p-value associated with this statistic is 0.2143, which is greater than the 0.05 significance level. Therefore, we fail to reject the null hypothesis that the medians of the groups are equal. This means that there is no significant difference in the EC_sum scores between males and females at the 0.05 significance level.
+
+## to see the event level differences in Eating Competence Score
+```{r}
+kruskal.test(EC_data$EC_sum ~ EC_data$Event_combined)
+```
+In the given output, the test was applied to the EC_sum variable grouped by the Event_combined variable, resulting in a chi-squared test statistic of 4.61 with 3 degrees of freedom. The p-value associated with this statistic is 0.2027, which is greater than the 0.05 significance level. Therefore, we fail to reject the null hypothesis that the medians of the groups are equal. This means that there is no significant difference in the EC_sum scores across the different events at the 0.05 significance level.
+
+
+## to see the race differences in Eating Competence Score
+```{r}
+kruskal.test(EC_data$EC_sum ~ EC_data$Race)
+```
+In the given output, the test was applied to the EC_sum variable grouped by the Race variable, resulting in a chi-squared test statistic of 2.3805 with 5 degrees of freedom. The p-value associated with this statistic is 0.7944, which is greater than the 0.05 significance level. Therefore, we fail to reject the null hypothesis that the medians of the groups are equal. This means that there is no significant difference in the EC_sum scores between different races at the 0.05 significance level.
+
+
+
+#EDA
+```{=latex}
+\newpage
+```
+
+```{r}
+library(ggplot2)
+
+plot1 <- ggplot(DESA_data, aes(x=factor(Gender), y=ED_sum,color=factor(Event_combined)))+
+     geom_boxplot()+
+     geom_point(position = position_jitterdodge()) +
+     theme(legend.position = "right") + labs(title = "Does Gender effect Disordered Eating")+
+     theme(plot.title = element_text(hjust = 0.5)) +
+     labs(x = "Gender", y = "Eating Disorder Score") 
+plot1
+```
+
+```{r, echo=FALSE, results='asis'}
+cat("\\vspace{5mm}")
+```
+
+```{r}
+plot2 <- ggplot(DESA_data, aes(x=factor(Event_combined), y=ED_sum,color=factor(Gender)))+
+     geom_boxplot()+
+     geom_point(position = position_jitterdodge()) +
+     theme(legend.position = "right") + labs(title = "Does Event effect Disordered Eating")+
+     theme(plot.title = element_text(hjust = 0.5)) +
+     labs(x = "Event Level", y = "Eating Disorder Score") 
+
+plot2
+
+```
+
+# Summary Statistics (mean and standard deviation) of the DESA_6 Score
+```{r}
+#DESA_6
+library(dplyr)
+DESA_score <- ED$`DESA-6 Sum`
+
+# Calculate the mean
+mean_DESA <- mean(DESA_score)
+cat("Mean Score of DESA_score:", mean_DESA, "\n")
+
+# Calculate the standard deviation
+sd_DESA <- sd(DESA_score)
+cat("Standard Deviation of DESA_score:", sd_DESA, "\n")
+```
+
+# Summary Statistics (mean and standard deviation) of the EC Score
+```{r}
+#EC
+library(dplyr)
+EC_score <- ED$`EC-sum`
+
+# Calculate the mean
+mean_EC <- mean(EC_score)
+cat("Mean score of EC_score:", mean_EC, "\n")
+
+# Calculate the standard deviation
+sd_EC <- sd(EC_score)
+cat("Standard Deviation of EC_score:", sd_EC, "\n")
+```
+
+# Summary Statistics (mean and standard deviation) of the MBSQ Score
+```{r}
+#EC
+library(dplyr)
+MBSQ_score <- ED$`MBSQ-sum`
+
+# Calculate the mean
+mean_MBSQ <- mean(MBSQ_score)
+cat("Mean of MBSQ_score:", mean_MBSQ, "\n")
+
+# Calculate the standard deviation
+sd_MBSQ <- sd(MBSQ_score)
+cat("Standard Deviation of MBSQ_score:", sd_MBSQ, "\n")
+```
+
+
